@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::io::stdout;
-use std::{collections::hash_map, fs::File, io::Write};
+use std::{fs::File, io::Write};
 use tokio::sync::mpsc;
 
 mod crawler;
@@ -34,7 +34,7 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn flytrap<W: Write + Send + 'static>(_root_url: String, mut out: W) {
+async fn flytrap<W: Write + Send + 'static>(root_url: String, mut out: W) {
     //out.write("hi\n".as_bytes()).expect("whoops");
 
     // 32 length because fuck it idk. id have to benchmark or use heuristics to get a real number
@@ -50,7 +50,7 @@ async fn flytrap<W: Write + Send + 'static>(_root_url: String, mut out: W) {
     let iden =
         tokio::spawn(async move { identity::writer(crawler_tx_clone, &mut iden_q_rx, out).await });
 
-    crawler_q_tx.send(String::from("hello there")).await;
+    crawler_q_tx.send(root_url).await;
 
     disp.await;
 }
