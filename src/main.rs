@@ -1,8 +1,11 @@
+use anyhow::{Context, Result};
 use clap::Parser;
-use std::{
-    fs::File,
-    io::{stdout, Write},
-};
+use std::io::stdout;
+use std::{collections::hash_map, fs::File, io::Write};
+use tokio::sync::mpsc;
+
+mod crawler;
+mod identity;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -15,20 +18,39 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
     println!("Hello, {:?}", args);
 
     match args.output.as_str() {
-        "-" => flytrap(args.root, &mut stdout()).await,
+        "-" => flytrap(args.root, stdout()).await,
         _ => {
-            let mut f = File::create(args.output).expect("file not found");
-            flytrap(args.root, &mut f).await;
+            let mut f = File::create(&args.output)
+                .with_context(|| format!("file {} cannot be created", args.output))?;
+            flytrap(args.root, f).await;
         }
     }
+    Ok(())
 }
 
-async fn flytrap(_root_url: String, out: &mut impl Write) {
-    out.write("hi".as_bytes()).expect("whoops");
+async fn flytrap<W: Write + Send + 'static>(_root_url: String, mut out: W) {
+    //out.write("hi\n".as_bytes()).expect("whoops");
+
+    // 32 length because fuck it idk. id have to benchmark or use heuristics to get a real number
+    // TODO: change to &str
+    let (iden_q_tx, mut iden_q_rx) = mpsc::channel::<(String, String)>(32);
+
+    // TODO: change to &str
+    let (crawler_q_tx, mut crawler_q_rx) = mpsc::channel::<String>(32);
+
+    let disp = tokio::spawn(async move { crawler::dispatcher(&mut crawler_q_rx, iden_q_tx).await });
+
+    let crawler_tx_clone = crawler_q_tx.clone();
+    let iden =
+        tokio::spawn(async move { identity::writer(crawler_tx_clone, &mut iden_q_rx, out).await });
+
+    crawler_q_tx.send(String::from("hello there")).await;
+
+    disp.await;
 }
