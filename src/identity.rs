@@ -29,7 +29,8 @@ pub async fn writer<W: Write + Send + 'static>(
             None => {
                 identity_map.insert(to_bytes.to_vec(), id_count);
 
-                crawler_q_tx.send(to).await;
+                // error should crash program
+                crawler_q_tx.send(to).await.unwrap();
 
                 let id = id_count;
                 id_count += 1;

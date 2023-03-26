@@ -11,7 +11,6 @@ mod identity;
 #[command(version, about, long_about = None)]
 struct Args {
     #[arg(short, long, default_value_t = String::from("https://ryanprairie.com"))]
-    // TODO: get better root
     root: String,
 
     #[arg(short, long, default_value_t = String::from("web-graph.txt"))]
@@ -28,17 +27,21 @@ async fn main() -> Result<(), anyhow::Error> {
     println!("Hello, {:?}", args);
 
     match args.output.as_str() {
-        "-" => flytrap(args.root, stdout(), args.limit).await,
+        "-" => flytrap(args.root, stdout(), args.limit).await.unwrap(),
         _ => {
-            let mut f = File::create(&args.output)
+            let f = File::create(&args.output)
                 .with_context(|| format!("file {} cannot be created", args.output))?;
-            flytrap(args.root, f, args.limit).await;
+            flytrap(args.root, f, args.limit).await.unwrap()
         }
     }
     Ok(())
 }
 
-async fn flytrap<W: Write + Send + 'static>(root_url: String, mut out: W, limit: u32) {
+async fn flytrap<W: Write + Send + 'static>(
+    root_url: String,
+    out: W,
+    limit: u32,
+) -> Result<(), anyhow::Error> {
     //out.write("hi\n".as_bytes()).expect("whoops");
 
     // 32 length because fuck it idk. id have to benchmark or use heuristics to get a real number
@@ -55,8 +58,9 @@ async fn flytrap<W: Write + Send + 'static>(root_url: String, mut out: W, limit:
     let iden =
         tokio::spawn(async move { identity::writer(crawler_tx_clone, &mut iden_q_rx, out).await });
 
-    crawler_q_tx.send(root_url).await;
+    crawler_q_tx.send(root_url).await?;
 
-    disp.await;
-    iden.await;
+    disp.await?;
+    iden.await?;
+    Ok(())
 }
