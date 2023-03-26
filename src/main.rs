@@ -24,8 +24,6 @@ struct Args {
 async fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
-    println!("Hello, {:?}", args);
-
     match args.output.as_str() {
         "-" => flytrap(args.root, stdout(), args.limit).await.unwrap(),
         _ => {
