@@ -58,7 +58,7 @@ async fn flytrap<W: Write + Send + 'static>(
 
     crawler_q_tx.send(root_url).await?;
 
-    disp.await?;
-    iden.await?;
+    let _ = disp.await?;
+    let _ = iden.await?;
     Ok(())
 }
