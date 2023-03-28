@@ -38,7 +38,7 @@ pub async fn dispatcher(
     }
 
     // await till all tasks are complete
-    for w in waitset.join_next().await {
+    while let Some(w) = waitset.join_next().await {
         match w {
             Ok(_) => continue,
             Err(e) => return Err(e.into()),
