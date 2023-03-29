@@ -13,6 +13,7 @@ pub async fn dispatcher(
     crawler_q_rx: &mut mpsc::Receiver<String>,
     iden_q_tx: mpsc::Sender<(String, String)>,
     limit: u32,
+    delay: Duration,
 ) -> Result<()> {
     let mut count: u32 = 0;
     let mut waitset = JoinSet::new();
@@ -30,7 +31,7 @@ pub async fn dispatcher(
 
     while let Some(url) = crawler_q_rx.recv().await {
         // delay stops websites from shutting us down
-        let s = tokio::time::sleep(Duration::from_millis(80));
+        let s = tokio::time::sleep(delay);
         s.await;
 
         count += 1;

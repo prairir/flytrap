@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::io::stdout;
+use std::{io::stdout, time::Duration};
 
 use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 use std::{fs::File, io::Write};
@@ -23,6 +23,9 @@ struct Args {
 
     #[arg(short, long, default_value_t = 100)]
     limit: u32,
+
+    #[arg(short, long, default_value_t = 80)]
+    ms_delay: u64,
 }
 
 #[tokio::main]
@@ -47,12 +50,17 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("must init terminal");
     }
 
+    let delay_duration = Duration::from_millis(args.ms_delay);
     match args.output.as_str() {
-        "-" => flytrap(args.root, stdout(), args.limit).await.unwrap(),
+        "-" => flytrap(args.root, stdout(), args.limit, delay_duration)
+            .await
+            .unwrap(),
         _ => {
             let f = File::create(&args.output)
                 .with_context(|| format!("file {} cannot be created", args.output))?;
-            flytrap(args.root, f, args.limit).await.unwrap()
+            flytrap(args.root, f, args.limit, delay_duration)
+                .await
+                .unwrap()
         }
     }
     Ok(())
@@ -62,6 +70,7 @@ async fn flytrap<W: Write + Send + 'static>(
     root_url: String,
     out: W,
     limit: u32,
+    delay: Duration,
 ) -> Result<(), anyhow::Error> {
     //out.write("hi\n".as_bytes()).expect("whoops");
 
@@ -72,8 +81,9 @@ async fn flytrap<W: Write + Send + 'static>(
     // TODO: change to &str
     let (crawler_q_tx, mut crawler_q_rx) = mpsc::channel::<String>(32);
 
-    let disp =
-        tokio::spawn(async move { crawler::dispatcher(&mut crawler_q_rx, iden_q_tx, limit).await });
+    let disp = tokio::spawn(async move {
+        crawler::dispatcher(&mut crawler_q_rx, iden_q_tx, limit, delay).await
+    });
 
     let crawler_tx_clone = crawler_q_tx.clone();
     let iden =
