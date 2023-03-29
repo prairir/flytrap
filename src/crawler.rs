@@ -30,7 +30,7 @@ pub async fn dispatcher(
 
     while let Some(url) = crawler_q_rx.recv().await {
         // delay stops websites from shutting us down
-        let s = tokio::time::sleep(Duration::from_millis(100));
+        let s = tokio::time::sleep(Duration::from_millis(80));
         s.await;
 
         count += 1;
