@@ -11,14 +11,14 @@ use url::Url;
 
 pub async fn dispatcher(
     crawler_q_rx: &mut mpsc::Receiver<String>,
-    iden_q_tx: mpsc::Sender<(String, String)>,
+    iden_q_tx: mpsc::Sender<(bool, String, String)>,
     limit: u32,
     delay: Duration,
 ) -> Result<()> {
     let mut count: u32 = 0;
     let mut waitset = JoinSet::new();
 
-    let retry_police = ExponentialBackoff::builder().build_with_max_retries(5);
+    let retry_police = ExponentialBackoff::builder().build_with_max_retries(3);
     let req_client = reqwest::ClientBuilder::new()
         .timeout(Duration::from_secs(5))
         .build()
@@ -57,17 +57,24 @@ pub async fn dispatcher(
 
 // TODO: maybe pass in selector with ARC to save on allocations
 pub async fn worker(
-    iden_q_rx: mpsc::Sender<(String, String)>,
+    iden_q_rx: mpsc::Sender<(bool, String, String)>,
     client: Arc<reqwest_middleware::ClientWithMiddleware>,
     url: String,
 ) -> Result<()> {
     // this error should propegate up
-    let url_parsed = Url::parse(url.as_str()).unwrap();
+    let url_parsed = match Url::parse(url.as_str()) {
+        Ok(u) => u,
+        Err(_) => {
+            tokio::spawn(async move { iden_q_rx.send((true, url, String::from(""))).await });
+            return Ok(());
+        }
+    };
 
     let resp = match client.get(url.as_str()).send().await {
         Ok(response) => response,
         Err(e) => {
             info!("couldnt get url \"{}\": {}", url, e);
+            tokio::spawn(async move { iden_q_rx.send((true, url, String::from(""))).await });
             return Ok(());
         }
     };
@@ -78,6 +85,7 @@ pub async fn worker(
         Ok(response) => response,
         Err(e) => {
             info!("no body at url \"{}\": {}", url, e);
+            tokio::spawn(async move { iden_q_rx.send((true, url, String::from(""))).await });
             return Ok(());
         }
     };
@@ -87,6 +95,7 @@ pub async fn worker(
         let a_selector = match Selector::parse(r#"a[href]"#) {
             Ok(selector) => selector,
             Err(_) => {
+                tokio::spawn(async move { iden_q_rx.send((true, url, String::from(""))).await });
                 return Ok(());
             }
         };
@@ -129,12 +138,24 @@ pub async fn worker(
                 }
             };
 
+            link = match link.query() {
+                None => link,
+                Some(_) => {
+                    link.set_query(None);
+                    link
+                }
+            };
+
             let iden_clone = iden_q_rx.clone();
             let url_clone = url.clone();
 
             // TODO: change to &str so less heap copying
-            let t =
-                tokio::spawn(async move { iden_clone.send((url_clone, link.to_string())).await });
+            let t = tokio::spawn(async move {
+                iden_clone
+                    .send((false, url_clone, link.to_string()))
+                    .await
+                    .unwrap()
+            });
 
             links.push(t);
         }
@@ -144,9 +165,16 @@ pub async fn worker(
     for link in links {
         match link.await {
             Ok(_) => {}
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                tokio::spawn(async move {
+                    iden_q_rx.send((true, url, String::from(""))).await.unwrap()
+                });
+                return Err(e.into());
+            }
         };
     }
+
+    tokio::spawn(async move { iden_q_rx.send((true, url, String::from(""))).await });
 
     Ok(())
 }

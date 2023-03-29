@@ -76,7 +76,7 @@ async fn flytrap<W: Write + Send + 'static>(
 
     // 32 length because fuck it idk. id have to benchmark or use heuristics to get a real number
     // TODO: change to &str
-    let (iden_q_tx, mut iden_q_rx) = mpsc::channel::<(String, String)>(32);
+    let (iden_q_tx, mut iden_q_rx) = mpsc::channel::<(bool, String, String)>(32);
 
     // TODO: change to &str
     let (crawler_q_tx, mut crawler_q_rx) = mpsc::channel::<String>(32);
