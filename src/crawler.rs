@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
+use log::info;
 use reqwest_middleware::{self, ClientBuilder};
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
 use scraper::{Html, Selector};
@@ -28,6 +29,10 @@ pub async fn dispatcher(
     );
 
     while let Some(url) = crawler_q_rx.recv().await {
+        // delay stops websites from shutting us down
+        let s = tokio::time::sleep(Duration::from_millis(100));
+        s.await;
+
         count += 1;
         let id_clone = iden_q_tx.clone();
         let client_clone = client.clone();
@@ -60,21 +65,29 @@ pub async fn worker(
 
     let resp = match client.get(url.as_str()).send().await {
         Ok(response) => response,
-        Err(_) => return Ok(()),
+        Err(e) => {
+            info!("couldnt get url \"{}\": {}", url, e);
+            return Ok(());
+        }
     };
 
     let mut links = Vec::new();
 
     let body = match resp.text().await {
         Ok(response) => response,
-        Err(_) => return Ok(()),
+        Err(e) => {
+            info!("no body at url \"{}\": {}", url, e);
+            return Ok(());
+        }
     };
 
     {
         let doc = Html::parse_document(&body);
         let a_selector = match Selector::parse(r#"a[href]"#) {
             Ok(selector) => selector,
-            Err(_) => return Ok(()),
+            Err(_) => {
+                return Ok(());
+            }
         };
 
         // find all links on page

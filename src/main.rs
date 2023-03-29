@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::io::stdout;
+
+use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 use std::{fs::File, io::Write};
 use tokio::sync::mpsc;
 
@@ -16,6 +18,9 @@ struct Args {
     #[arg(short, long, default_value_t = String::from("web-graph.txt"))]
     output: String,
 
+    #[arg(short, long, default_value_t = false)]
+    debug: bool,
+
     #[arg(short, long, default_value_t = 100)]
     limit: u32,
 }
@@ -23,6 +28,24 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
+
+    if args.debug {
+        TermLogger::init(
+            LevelFilter::Info,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::AlwaysAnsi,
+        )
+        .expect("must init terminal");
+    } else {
+        TermLogger::init(
+            LevelFilter::Off,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Never,
+        )
+        .expect("must init terminal");
+    }
 
     match args.output.as_str() {
         "-" => flytrap(args.root, stdout(), args.limit).await.unwrap(),
