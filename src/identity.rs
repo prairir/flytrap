@@ -29,8 +29,11 @@ pub async fn writer<W: Write + Send + 'static>(
             None => {
                 identity_map.insert(to_bytes.to_vec(), id_count);
 
+                let crawler_q_tx_clone = crawler_q_tx.clone();
                 // error should crash program
-                crawler_q_tx.send(to).await.unwrap();
+                tokio::spawn(async move {
+                    crawler_q_tx_clone.send(to).await.unwrap();
+                });
 
                 let id = id_count;
                 id_count += 1;
